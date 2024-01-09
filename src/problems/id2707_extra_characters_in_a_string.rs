@@ -25,25 +25,9 @@ use crate::Solution;
  * > 下标为 0 ，1 和 2 的字符没有使用，所以我们返回 3 。
  */
 
-use std::collections::HashSet;
-
 impl Solution {
     pub fn min_extra_char(s: String, dictionary: Vec<String>) -> i32 {
-        let word_set = dictionary.iter()
-            .map(|word| word.to_owned())
-            .collect::<HashSet<_>>();
-
-        let n = s.len();
-        let mut f: Vec<i32> = vec![0i32; n+1];
-        for i in 1..=n {
-            f[i] = f[i-1] + 1;
-            for j in 0..i {
-                if word_set.contains(&s[j..i]) {
-                    f[i] = f[i].min(f[j]);
-                }
-            }
-        }
-        f[n]
+        unimplemented!()
     }
 }
 
