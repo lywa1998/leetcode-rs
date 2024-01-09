@@ -1,29 +1,28 @@
 use crate::Solution;
 
 /**
- * 2707. Extra Characters in a String
+ * 2707. 字符串中的额外字符
  * 
- * You are given a 0-indexed string s and a dictionary of words dictionary. 
- * You have to break s into one or more non-overlapping substrings such that each substring is present in dictionary. 
- * There may be some extra characters in s which are not present in any of the substrings.
+ * 给你一个下标从 0 开始的字符串 s 和一个单词字典 dictionary 。
+ * 你需要将 s 分割成若干个 互不重叠 的子字符串，每个子字符串都在 dictionary 中出现过。
+ * s 中可能会有一些 额外的字符 不在任何子字符串中。
  * 
- * Return the minimum number of extra characters left over if you break up s optimally.
+ * 请你采取最优策略分割 s ，使剩下的字符 最少 。
  * 
  * 
- * Example 1:
+ * 示例 1：
+ *
+ * > 输入：s = "leetscode", dictionary = ["leet","code","leetcode"]
+ * > 输出：1
+ * > 解释：将 s 分成两个子字符串：下标从 0 到 3 的 "leet" 和下标从 5 到 8 的 "code" 。
+ * > 只有 1 个字符没有使用（下标为 4），所以我们返回 1 。
+ *
+ * 示例 2：
  * 
- * Input: s = "leetscode", dictionary = ["leet","code","leetcode"]
- * Output: 1
- * Explanation: We can break s in two substrings: "leet" from index 0 to 3 and "code" from index 5 to 8. 
- * There is only 1 unused character (at index 4), so we return 1.
- * 
- * Example 2:
- * 
- * Input: s = "sayhelloworld", dictionary = ["hello","world"]
- * Output: 3
- * Explanation: We can break s in two substrings: "hello" from index 3 to 7 and "world" from index 8 to 12. 
- * The characters at indices 0, 1, 2 are not used in any substring and thus are considered as extra characters. 
- * Hence, we return 3.
+ * > 输入：s = "sayhelloworld", dictionary = ["hello","world"]
+ * > 输出：3
+ * > 解释：将 s 分成两个子字符串：下标从 3 到 7 的 "hello" 和下标从 8 到 12 的 "world" 。
+ * > 下标为 0 ，1 和 2 的字符没有使用，所以我们返回 3 。
  */
 
 use std::collections::HashSet;
