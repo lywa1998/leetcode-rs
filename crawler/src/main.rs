@@ -221,9 +221,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_openai() -> Result<()> {
-        // let api_key = "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"; // This secret could be from a file, or environment variable.
-        // let config = OpenAIConfig::new()
-        //     .with_api_key(api_key);
         use async_openai::types::{
                 ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestSystemMessageArgs,
                 ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequestArgs,
