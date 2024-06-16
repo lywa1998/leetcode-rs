@@ -4,6 +4,9 @@
 - use gpt to generate test case
 
 ## Usage
+
 ```
-cargo run -- -s <id> -e <id>
+// Add OpenAI key to environment.
+export OPENAI_API_KEY='sk-...'
+cargo run -- -p <id>
 ```

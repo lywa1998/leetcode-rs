@@ -1,15 +1,30 @@
-use regex::Regex;
-use reqwest::{blocking::Client, header::{HeaderValue, HeaderMap}};
-use rayon::prelude::*;
 use anyhow::{anyhow, Ok, Result};
-use tracing::Level;
-use std::{fs::{self, File}, thread, time::Duration};
-use std::sync::Arc;
-use async_openai::{types::{ChatCompletionRequestAssistantMessage, ChatCompletionRequestMessage, ChatCompletionRequestMessageContentPart, ChatCompletionRequestMessageContentPartText, ChatCompletionRequestSystemMessage, ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs, Role}, Client as OpenAI};
-use tokio::runtime::Runtime;
-use std::io::Write;
-use html2md::parse_html;
+use async_openai::{
+    types::{
+        ChatCompletionRequestAssistantMessage, ChatCompletionRequestMessage,
+        ChatCompletionRequestMessageContentPart, ChatCompletionRequestMessageContentPartText,
+        ChatCompletionRequestSystemMessage, ChatCompletionRequestUserMessage,
+        ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs, Role,
+    },
+    Client as OpenAI,
+};
 use clap::Parser;
+use html2md::parse_html;
+use rayon::prelude::*;
+use regex::Regex;
+use reqwest::{
+    blocking::Client,
+    header::{HeaderMap, HeaderValue},
+};
+use std::io::Write;
+use std::sync::Arc;
+use std::{
+    fs::{self, File},
+    thread,
+    time::Duration,
+};
+use tokio::runtime::Runtime;
+use tracing::Level;
 
 const COOKIE: &str = "";
 const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.152 Safari/537.36";
@@ -18,16 +33,11 @@ const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleW
 #[command(version, about, long_about = None)]
 struct Cli {
     #[arg(short, long)]
-    start: u64,
-
-    #[arg(short, long)]
-    end: u64,
+    pid: u64,
 }
 
 fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
-        .init();
+    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
     let args = Cli::parse();
 
@@ -38,12 +48,10 @@ fn main() -> Result<()> {
     header.insert("cookie", HeaderValue::from_str(COOKIE).unwrap());
 
     // 创建一个 HTTP 客户端
-    let client = Arc::new(Client::builder()
-        .default_headers(header)
-        .build()?
-    );
+    let client = Arc::new(Client::builder().default_headers(header).build()?);
 
-    let problem_list = client.get("https://leetcode.cn/api/problems/all/")
+    let problem_list = client
+        .get("https://leetcode.cn/api/problems/all/")
         .send()?
         .text()?;
     // println!("Problem list: {}", problem_list);
@@ -53,17 +61,20 @@ fn main() -> Result<()> {
         .ok_or(anyhow!("Not fount problem list"))?;
     tracing::info!("Problem list: {}", problem_list.len());
     // craw_problem(client.clone(), 1, "two-sum")?;
-    problem_list.par_iter()
+    problem_list
+        .par_iter()
         .filter(|problem| !problem["paid_only"].as_bool().unwrap_or(false))
         .for_each(|problem| {
             let id = problem["stat"]["question_id"].as_u64().unwrap();
-            if args.start > id || id > args.end {return;}
+            if args.pid != id {
+                return;
+            }
             let title = problem["stat"]["question__title_slug"].as_str().unwrap();
             tracing::info!("Problem: {} {}", id, title);
             craw_problem(client.clone(), id as usize, title).unwrap();
             thread::sleep(Duration::from_secs(5));
         });
- 
+
     Ok(())
 }
 
@@ -71,12 +82,15 @@ fn craw_problem(client: Arc<Client>, id: usize, title: &str) -> Result<()> {
     let problem_detail = get_problem_detail(client.clone(), title)?;
     let problem_code = get_problem_code(client.clone(), title)?;
     let problem_test = get_test_code(&problem_detail, &problem_code)?;
-    
-    let content = format!("#![allow(unused)]\nuse crate::Solution;\n\n{}\n\n{}\n\n{}", problem_detail, problem_code, problem_test);
 
-    fs::write(format!("problem/src/en_US/id_{}_{}.rs", id, title.replace('-', "_")), content)?;
+    let content = format!(
+        "#![allow(unused)]\nstruct Solution;\n\n{}\n\n{}\n\n{}",
+        problem_detail, problem_code, problem_test
+    );
 
-    scan_directory("problem/src/en_US")?;
+    fs::write(format!("problem/src/solutions/id_{}.rs", id), content)?;
+
+    scan_directory("problem/src/solutions")?;
     Ok(())
 }
 
@@ -84,22 +98,25 @@ fn get_problem_detail(client: Arc<Client>, title: &str) -> Result<String> {
     // Get problem detail
     let params = format!(
         r#"{{"query":"\n    query questionContent($titleSlug: String!) {{\n  question(titleSlug: $titleSlug) {{\n    content\n    editorType\n    mysqlSchemas\n    dataSchemas\n  }}\n}}\n    ","variables":{{"titleSlug":"{}"}},"operationName":"questionContent"}}"#,
-       title 
+        title
     );
 
-    let question_detail = client.post("https://leetcode.cn/graphql/")
-            .body(params)
-            .send()?
-            .text()?;
+    let question_detail = client
+        .post("https://leetcode.cn/graphql/")
+        .body(params)
+        .send()?
+        .text()?;
     tracing::info!("Get Problem {} detail", title);
     tracing::debug!("Problem {} detail: {}", title, question_detail);
     let question_detail: serde_json::Value = serde_json::from_str(&question_detail)?;
     let question_detail = &question_detail["data"]["question"]["content"];
-    let question_detail_md = parse_html(question_detail.as_str().ok_or(anyhow!(
-        "{} content cannot convert to string",
-        title
-    ))?);
-    let question_detail_md = question_detail_md.lines()
+    let question_detail_md = parse_html(
+        question_detail
+            .as_str()
+            .ok_or(anyhow!("{} content cannot convert to string", title))?,
+    );
+    let question_detail_md = question_detail_md
+        .lines()
         .map(|line| format!("// {}", line))
         .collect::<Vec<_>>()
         .join("\n");
@@ -113,7 +130,8 @@ fn get_problem_code(client: Arc<Client>, title: &str) -> Result<String> {
         title
     );
 
-    let question_code = client.post("https://leetcode.cn/graphql/")
+    let question_code = client
+        .post("https://leetcode.cn/graphql/")
         .body(params)
         .send()?
         .text()?;
@@ -123,7 +141,7 @@ fn get_problem_code(client: Arc<Client>, title: &str) -> Result<String> {
         .ok_or(anyhow!("{} codeSnippets cannot convert to array", title))?
         .iter()
         .find(|code_snippet| code_snippet["langSlug"].as_str().unwrap_or("other") == "rust")
-        .ok_or(anyhow!("probelm {} have not rust codeSnippets now.", title))?;  
+        .ok_or(anyhow!("probelm {} have not rust codeSnippets now.", title))?;
     let question_code = &question_code["code"]
         .as_str()
         .ok_or(anyhow!("{} codeSnippets not found", title))?;
@@ -164,9 +182,20 @@ fn get_test_code(detail: &str, code: &str) -> Result<String> {
     let request = CreateChatCompletionRequestArgs::default()
         .model("gpt-3.5-turbo")
         .messages(vec![
-            ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage { role: Role::System, content: "You are a Rust programmer.".to_string(), ..Default::default() }),
-            ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage{ role: Role::User, content: prompt_message, ..Default::default() }),
-            ChatCompletionRequestMessage::Assistant(ChatCompletionRequestAssistantMessage { role: Role::Assistant, content: Some(r"The test code is:
+            ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
+                role: Role::System,
+                content: "You are a Rust programmer.".to_string(),
+                ..Default::default()
+            }),
+            ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
+                role: Role::User,
+                content: prompt_message,
+                ..Default::default()
+            }),
+            ChatCompletionRequestMessage::Assistant(ChatCompletionRequestAssistantMessage {
+                role: Role::Assistant,
+                content: Some(
+                    r"The test code is:
             #[cfg(test)]
             mod tests {
                 use super::*;
@@ -179,22 +208,39 @@ fn get_test_code(detail: &str, code: &str) -> Result<String> {
                     assert_eq!(res, ans);
                 }
             }
-            ".to_string()), ..Default::default() }),
-            ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage{ role: Role::User, content: query_message, ..Default::default() }),
+            "
+                    .to_string(),
+                ),
+                ..Default::default()
+            }),
+            ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
+                role: Role::User,
+                content: query_message,
+                ..Default::default()
+            }),
         ])
         .build()?;
-    
+
     let rt = Runtime::new()?;
-    
-    let mut response = rt.block_on( async move {
-        client.chat().create(request).await
-    })?;
-    
-    let content = response.choices.swap_remove(0).message.content.ok_or(anyhow!("assistant no message"))?;
+
+    let mut response = rt.block_on(async move { client.chat().create(request).await })?;
+
+    let content = response
+        .choices
+        .swap_remove(0)
+        .message
+        .content
+        .ok_or(anyhow!("assistant no message"))?;
 
     let re = Regex::new(r"(?s)```rust\n(.*?)```").unwrap();
-    let captures = re.captures(&content).ok_or(anyhow!("assistant no message"))?;
-    let content = captures.get(1).map_or("#[cfg(test)]\nmod tests{\n}".to_string(), |m| m.as_str().to_string());
+    let captures = re
+        .captures(&content)
+        .ok_or(anyhow!("assistant no message"))?;
+    let content = captures
+        .get(1)
+        .map_or("#[cfg(test)]\nmod tests{\n}".to_string(), |m| {
+            m.as_str().to_string()
+        });
 
     Ok(content)
 }
@@ -222,8 +268,8 @@ mod tests {
     #[tokio::test]
     async fn test_openai() -> Result<()> {
         use async_openai::types::{
-                ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestSystemMessageArgs,
-                ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequestArgs,
+            ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestSystemMessageArgs,
+            ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequestArgs,
         };
 
         let client = OpenAI::new();
